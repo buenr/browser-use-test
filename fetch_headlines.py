@@ -1,6 +1,10 @@
 import requests
 from bs4 import BeautifulSoup
 from typing import List, Tuple
+from dotenv import load_dotenv
+import os
+
+load_dotenv('.env')
 
 def fetch_finviz_headlines(urls: List[str]) -> List[Tuple[str, str]]:
     all_headlines: List[Tuple[str, str]] = []
@@ -80,55 +84,62 @@ def fetch_finviz_headlines(urls: List[str]) -> List[Tuple[str, str]]:
 
     return all_headlines
 
-def summarize_headlines_with_gemini_pseudocode(headlines: List[Tuple[str, str]]):
-    print("\n--- Google Gemini Summarization (Pseudocode) ---")
+def summarize_headlines_with_gemini(headlines: List[Tuple[str, str]]):
+    print("\n--- Google Gemini Summarization ---")
     if not headlines:
         print("No headlines available to summarize.")
         return
 
-    print(f"Imagine these {len(headlines)} headlines are now being sent to a generative AI model like Google Gemini:")
+    print(f"Sending {len(headlines)} headlines to Google Gemini for summarization...")
 
-    # 1. Format headlines into a prompt
+    # Format headlines into a prompt
     prompt_headlines = "\n".join([f"{time} {text}" for time, text in headlines])
     full_prompt = (
         "Please summarize the following financial news headlines, "
-        "highlighting key market trends or significant events:\n\n"
-        f"{prompt_headlines}\n\nSummary:"
+        "highlighting key market trends or significant events. "
+        "Focus on identifying any major market-moving news, sector trends, "
+        "or economic indicators mentioned across these headlines:\n\n"
+        f"{prompt_headlines}\n\n"
+        "Provide a concise summary in 3-5 bullet points."
     )
 
-    print("\nFormatted Prompt (first 500 chars):")
-    print(full_prompt[:500] + "..." if len(full_prompt) > 500 else full_prompt)
+    try:
+        import google.generativeai as genai
+        from google.generativeai.types.generation_types import StopCandidateException
+        from google.api_core.exceptions import InvalidArgument
 
-    print("\n# --- PSEUDOCODE FOR GEMINI API CALL ---")
-    print("# import google.generativeai as genai")
-    print("# ")
-    print("# # IMPORTANT: Replace with your actual API key")
-    print("# genai.configure(api_key='YOUR_GOOGLE_API_KEY')")
-    print("# ")
-    print("# # Initialize the model (e.g., gemini-pro)")
-    print("# model = genai.GenerativeModel('gemini-pro')")
-    print("# ")
-    print("# try:")
-    print("#     print('\n# Attempting to generate content (this is still pseudocode)...')")
-    print("#     # response = model.generate_content(full_prompt)")
-    print("#     # print('\n# --- AI Summary (Pseudocode) ---')")
-    print("#     # print(response.text)")
-    print("# except Exception as e:")
-    print("#     print(f'# An error occurred during hypothetical Gemini API call: {e}')")
-    print("# finally:")
-    print("#     print('# --- End of AI Summary (Pseudocode) ---')")
-    print("# ")
-    print("# NOTE: To run this, you would need to:")
-    print("# 1. Install the library: pip install google-generativeai")
-    print("# 2. Obtain an API key from Google AI Studio or Google Cloud.")
-    print("# 3. Uncomment the code above and replace 'YOUR_GOOGLE_API_KEY'.")
-    print("# --- END OF PSEUDOCODE ---")
+        # Configure the Gemini API
+        genai.configure(api_key=os.getenv('GOOGLE_API_KEY'))
+
+        # Initialize the model
+        model = genai.GenerativeModel('gemini-2.0-flash')
+
+        try:
+            print("Generating summary...")
+            response = model.generate_content(full_prompt)
+            print("\n--- AI Summary ---")
+            print(response.text)
+            print("--- End of AI Summary ---")
+            return response.text
+            
+        except StopCandidateException as e:
+            print(f"Content generation was stopped: {e}")
+        except InvalidArgument as e:
+            print(f"Invalid argument provided to the API: {e}")
+        except Exception as e:
+            print(f"An error occurred during content generation: {e}")
+
+    except ImportError:
+        print("Google Generative AI library not found.")
+        print("Please install it using: pip install google-generativeai")
+    except Exception as e:
+        print(f"An unexpected error occurred: {e}")
 
 if __name__ == "__main__":
     finviz_urls = ["https://finviz.com/news.ashx", "https://finviz.com/news.ashx?v=3"]
     print(f"Starting to fetch headlines from: {', '.join(finviz_urls)}")
 
-    all_raw_headlines = fetch_finviz_headlines(finviz_urls) # This returns List[Tuple[str, str]]
+    all_raw_headlines = fetch_finviz_headlines(finviz_urls)  # This returns List[Tuple[str, str]]
 
     print(f"\n--- Processing Headlines ---")
     print(f"Total raw headlines fetched (including duplicates): {len(all_raw_headlines)}")
@@ -146,10 +157,5 @@ if __name__ == "__main__":
         print("No unique headlines to display.")
     print("--- End of Unique Headlines ---")
 
-    # Store for Gemini (next step)
-    final_headlines_for_summary = unique_headlines_ordered
-
-    # Placeholder for Gemini summarization (next step)
-    # summary = summarize_headlines_with_gemini(final_headlines_for_summary)
-
-    summarize_headlines_with_gemini_pseudocode(final_headlines_for_summary)
+    # Generate summary using Gemini
+    summarize_headlines_with_gemini(unique_headlines_ordered)
