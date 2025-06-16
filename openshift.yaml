@@ -1,0 +1,109 @@
+apiVersion: v1
+kind: List
+items:
+- apiVersion: image.openshift.io/v1
+  kind: ImageStream
+  metadata:
+    name: producthunt-scraper
+    labels:
+      app: producthunt-scraper
+  spec:
+    lookupPolicy:
+      local: false
+- apiVersion: build.openshift.io/v1
+  kind: BuildConfig
+  metadata:
+    name: producthunt-scraper-build
+    labels:
+      app: producthunt-scraper
+  spec:
+    output:
+      to:
+        kind: ImageStreamTag
+        name: producthunt-scraper:latest
+    source:
+      type: Binary
+      binary: {}
+    strategy:
+      type: Docker
+      dockerStrategy:
+        dockerfilePath: Dockerfile
+    triggers:
+    - type: ConfigChange
+- apiVersion: apps.openshift.io/v1
+  kind: DeploymentConfig
+  metadata:
+    name: producthunt-scraper
+    labels:
+      app: producthunt-scraper
+  spec:
+    replicas: 1 # This is a batch job, so 1 replica is usually enough.
+    selector:
+      app: producthunt-scraper
+      deploymentconfig: producthunt-scraper
+    strategy:
+      type: Recreate # Recreate strategy is suitable for batch jobs
+    template:
+      metadata:
+        labels:
+          app: producthunt-scraper
+          deploymentconfig: producthunt-scraper
+      spec:
+        containers:
+        - name: producthunt-scraper
+          image: producthunt-scraper:latest # This will be built by the BuildConfig
+          ports: [] # No ports needed as it's a script, not a server
+          # Environment variables should be configured in OpenShift,
+          # possibly using Secrets for sensitive data like API keys.
+          # Example of how to reference a secret:
+          # env:
+          #   - name: AZURE_OPENAI_KEY
+          #     valueFrom:
+          #       secretKeyRef:
+          #         name: azure-openai-credentials
+          #         key: apiKey
+          #   - name: AZURE_OPENAI_ENDPOINT
+          #     valueFrom:
+          #       secretKeyRef:
+          #         name: azure-openai-credentials
+          #         key: apiEndpoint
+          #   - name: GOOGLE_API_KEY
+          #     valueFrom:
+          #       secretKeyRef:
+          #         name: google-api-credentials # Assuming a separate secret for Google
+          #         key: apiKey
+          resources:
+            limits:
+              memory: "512Mi" # Adjust as needed
+              cpu: "500m"    # Adjust as needed
+            requests:
+              memory: "256Mi" # Adjust as needed
+              cpu: "250m"    # Adjust as needed
+        restartPolicy: OnFailure # Restart the pod if the script fails
+    triggers:
+    - type: ConfigChange
+    - type: ImageChange
+      imageChangeParams:
+        automatic: true
+        containerNames:
+        - producthunt-scraper
+        from:
+          kind: ImageStreamTag
+          name: producthunt-scraper:latest
+# Note:
+# 1. This configuration assumes you will build the Docker image within OpenShift using the BuildConfig.
+#    Alternatively, you could build the image externally and push it to a registry that OpenShift can access.
+# 2. Secrets Management: For AZURE_OPENAI_KEY, AZURE_OPENAI_ENDPOINT, and GOOGLE_API_KEY,
+#    you should create OpenShift Secrets and then uncomment and adjust the 'env' section
+#    in the DeploymentConfig to securely inject these into your application.
+#    Example secret creation (replace with your actual values):
+#    oc create secret generic azure-openai-credentials --from-literal=apiKey='YOUR_AZURE_KEY' --from-literal=apiEndpoint='YOUR_AZURE_ENDPOINT'
+#    oc create secret generic google-api-credentials --from-literal=apiKey='YOUR_GOOGLE_KEY'
+# 3. If the application needs to write files (like product_hunt_leaderboard_report.json),
+#    you might need to configure persistent storage (PersistentVolumeClaim) and mount it into the container.
+#    For now, this YAML assumes output is to stdout or ephemeral storage.
+# 4. The `fetch_headlines.py` script is not explicitly run by this configuration. If you need to run both,
+#    you might consider:
+#    a) Two separate DeploymentConfigs.
+#    b) A wrapper script that runs both and is set as the CMD in the Dockerfile.
+#    c) Running one as a primary job and the other as a sidecar or a separate scheduled job.
