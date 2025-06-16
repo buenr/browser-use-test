@@ -1,3 +1,7 @@
 requests
 beautifulsoup4
 google-generativeai # For conceptual Google Gemini API integration
+browser_use
+dotenv
+langchain_openai
+pydantic
